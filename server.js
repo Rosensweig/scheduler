@@ -1,24 +1,33 @@
 // server.js
 
-//set up
-var express = require('express');
-var app = express();
-var port = process.env.PORT || 8080;
+// set up ======================================================================
+// get all the tools we need
+var express  = require('express');
+var app      = express();
+var port     = process.env.PORT || 8080;
 var mongoose = require('mongoose');
 var passport = require('passport');
-var flash = require('connect-flash');
+var flash    = require('connect-flash');
 
-var morgan = require('morgan');
+var morgan       = require('morgan');
 var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
-var session = require('express-session');
+var bodyParser   = require('body-parser');
+var session      = require('express-session');
 
 var configDB = require('./config/database.js');
 
-//configuration
-mongoose.connect(configDB.url); //connect to the database
+// configuration ===============================================================
+mongoose.connect(configDB.url,configDB.options); // connect to our database
+var conn = mongoose.connection;             
+ 
+conn.on('error', console.error.bind(console, 'connection error:'));  
+ 
+conn.once('open', function() {
+	console.log('connection opened');
+  // Wait for the database connection to establish, then start the app.                         
+});
 
-// require('./config/passport')(passport); // pass passport for configuration
+require('./config/passport')(passport); // pass passport for configuration
 
 // set up our express application
 app.use(morgan('dev')); // log every request to the console

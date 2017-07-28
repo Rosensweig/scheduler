@@ -1,7 +1,6 @@
 // config/passport.js
 
 // load all the things we need
-var LocalStrategy    = require('passport-local').Strategy;
 var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
 
 // load up the user model
@@ -34,10 +33,14 @@ module.exports = function(passport) {
         clientID        : configAuth.googleAuth.clientID,
         clientSecret    : configAuth.googleAuth.clientSecret,
         callbackURL     : configAuth.googleAuth.callbackURL,
+        access_type     : configAuth.googleAuth.access_type
 
     },
     function(token, refreshToken, profile, done) {
-
+        console.log("token: "+token);
+        console.log("refreshToken: "+refreshToken);
+        console.log("profile: "+Object.keys(profile));
+        console.log("done: "+done);
         // make the code asynchronous
         // User.findOne won't fire until we have all our data back from Google
         process.nextTick(function() {
@@ -56,10 +59,11 @@ module.exports = function(passport) {
                     var newUser          = new User();
 
                     // set all of the relevant information
-                    newUser.google.id    = profile.id;
-                    newUser.google.token = token;
-                    newUser.google.name  = profile.displayName;
-                    newUser.google.email = profile.emails[0].value; // pull the first email
+                    newUser.google.id           = profile.id;
+                    newUser.google.token        = token;
+                    newUser.google.refreshToken = refreshToken;
+                    newUser.google.name         = profile.displayName;
+                    newUser.google.email        = profile.emails[0].value; // pull the first email
 
                     // save the user
                     newUser.save(function(err) {

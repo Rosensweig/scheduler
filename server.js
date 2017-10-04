@@ -1,7 +1,6 @@
 // server.js
 
 // set up ======================================================================
-// get all the tools we need
 var express  = require('express');
 var app      = express();
 var port     = process.env.PORT || 8080;
@@ -16,8 +15,10 @@ var session      = require('express-session');
 
 var configDB = require('./config/database.js');
 
+mongoose.Promise = global.Promise;
+
 // configuration ===============================================================
-mongoose.connect(configDB.url,configDB.options); // connect to our database
+mongoose.connect(configDB.url,configDB.options); // connect to database
 var conn = mongoose.connection;             
  
 conn.on('error', console.error.bind(console, 'connection error:'));  

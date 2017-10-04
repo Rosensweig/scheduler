@@ -33,48 +33,47 @@ module.exports = function(passport) {
         clientID        : configAuth.googleAuth.clientID,
         clientSecret    : configAuth.googleAuth.clientSecret,
         callbackURL     : configAuth.googleAuth.callbackURL,
-        access_type     : configAuth.googleAuth.access_type
+        access_type     : "offline",
+        passReqToCallback: true
 
     },
-    function(token, refreshToken, profile, done) {
-        console.log("token: "+token);
-        console.log("refreshToken: "+refreshToken);
-        console.log("profile: "+Object.keys(profile));
-        console.log("done: "+done);
+    function(req, token, refreshToken, params, profile, done) {
         // make the code asynchronous
         // User.findOne won't fire until we have all our data back from Google
         process.nextTick(function() {
-
-            // try to find the user based on their google id
-            User.findOne({ 'google.id' : profile.id }, function(err, user) {
-                if (err)
-                    return done(err);
-
-                if (user) {
-
-                    // if a user is found, log them in
-                    return done(null, user);
-                } else {
-                    // if the user isnt in our database, create a new user
-                    var newUser          = new User();
-
-                    // set all of the relevant information
-                    newUser.google.id           = profile.id;
-                    newUser.google.token        = token;
-                    newUser.google.refreshToken = refreshToken;
-                    newUser.google.name         = profile.displayName;
-                    newUser.google.email        = profile.emails[0].value; // pull the first email
-
-                    // save the user
-                    newUser.save(function(err) {
-                        if (err)
-                            throw err;
-                        return done(null, newUser);
-                    });
-                }
-            });
+            if (!req.user) {
+                // try to find the user based on their google id
+                User.findOne({ 'google.id' : profile.id }, function(err, user) {
+                    if (err) {
+                        return done(err);
+                    }
+                    return saveUser(user, token, refreshToken, params, profile, done);
+                });
+            } else {
+                var user                    = req.user; // pull the user out of the session
+                return saveUser(user, token, refreshToken, params, profile, done);
+            }
         });
 
     }));
 
 };
+
+function saveUser(user, token, refreshToken, params, profile, done) {
+    if (!user) {
+        user = new User();
+        user.google.id              = profile.id;
+        user.google.name            = profile.displayName;
+        user.google.email           = profile.emails[0].value;
+    }
+    user.google.token               = token;
+    if (refreshToken) {
+        user.google.refreshToken    = refreshToken
+        user.google.expires         = Date.now() + params.expires_in*1000
+    }
+    user.save(function(err) {
+        if (err)
+            throw err;
+        return done(null, user);
+    });
+}

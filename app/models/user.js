@@ -5,14 +5,26 @@ var mongoose = require('mongoose');
 // define the schema for our user model
 var userSchema = mongoose.Schema({
 
-    local            : {
-    },
     google           : {
         id           : String,
         token        : String,
+        expires      : Date,
         refreshToken : String,
         email        : String,
         name         : String
+    },
+    preferences: {
+        default: Number,
+        rules: [],
+        availability: {
+            sunday: [],
+            monday: [],
+            tuesday: [],
+            wednesday: [],
+            thursday: [],
+            friday: [],
+            saturday: []
+        }
     }
 
 });

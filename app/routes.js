@@ -1,10 +1,14 @@
 // app/routes.js
 
 var User = require('./models/user');
-//const googleAPI = require('../config/googleAPI');
-const unirest = require('unirest');
+const googleAPI = require('../config/googleAPI');
 const auth = require('../config/auth');
 var google = require('googleapis');
+
+const Moment = require('moment');
+const MomentRange = require('moment-range');
+const moment = MomentRange.extendMoment(Moment);
+var momentExt = require('../config/moment');
 
 var OAuth2 = google.auth.OAuth2;
 
@@ -19,7 +23,7 @@ var scopes = ['profile', 'email', 'https://www.googleapis.com/auth/calendar'];
 var url = oauth2Client.generateAuthUrl({
   // 'online' (default) or 'offline' (gets refresh_token)
   access_type: 'offline',
-  scope: scopes,
+  scope: scopes
 });
 
 module.exports = function(app, passport) {
@@ -63,71 +67,61 @@ module.exports = function(app, passport) {
     // send to google to do the authentication
     // profile gets us their basic information including their name
     // email gets their emails
-    app.get('/auth/google', (req, res) => {
-        // passport.authenticate('google', { 
-        //     scope : ['profile', 'email', 'https://www.googleapis.com/auth/calendar'] 
-        // })
-        // make the unirest call
-        console.log("Request url: "+url);
-        unirest.get(url)
-        .end((response) => res.send(response.body));
-    });
+    app.get('/auth/google', 
+        //passport version
+        passport.authenticate('google', { 
+            scope : ['profile', 'email', 'https://www.googleapis.com/auth/calendar'],
+            accessType: "offline" 
+        })
+    );
 
 
 
-    // the callback after google has authenticated the user
-    // app.get('/auth/google/callback',
-    //     passport.authenticate('google', {
-    //         successRedirect : '/profile',
-    //         failureRedirect : '/'
-    //     })
-    // );
-
-    app.get('/auth/google/callback', (req, res) => {
-        var code = req.query.code;
-        console.log(code);
-        callback(code,function(){
-            res.redirect('/profile');
-        });
-    });
+    // callback -- passport version -- after google has authenticated the user
+    app.get('/auth/google/callback',
+        passport.authenticate('google', {
+            successRedirect : '/profile',
+            failureRedirect : '/'
+        })
+    );
 
 
     // CALENDAR
-    app.get('/calendar', (req, res) => {
-        //testing frontend-backend proxy connection
-        res.json({"message": "Hello, world!"});
-    });
+    app.get('/calendar', isLoggedIn, (req, res) => {
+        var eventsArray = [];
+        var availability = [moment.range(moment(), moment().add(12, "hours"))];
+        var user = req.user;
+        googleAPI.setCredentials(
+            user
+        ).then(function(response) {
+            return googleAPI.getCalendars(req.user.google.email);
+        }).then(function(events) {
+            for (var i=0; i<events.length; i++) {
+                console.log("Original event: ",events[i].start, ", ", events[i].end);
+                var start = moment(events[i].start.dateTime);
+                var end = moment(events[i].end.dateTime);
+                if (false /*check for specific rules*/) {
+                    //run different rules
+                } else { //default commute time
+                    start = start.subtract(user.preferences.default, "minutes");
+                    end = end.add(user.preferences.default, "minutes");
+                }
+                var temp = moment.range(start, end);
+                console.log("Modified event: ", temp.toString());
+                eventsArray.push(temp);
+            }
+            availability = momentExt.subtractArrays(availability, eventsArray);
+            res.json({availability: availability});
+        });
+    })
 
-    app.get('/calendar2', (req, res) => {
-        googleAPI.getCalendars();
-        res.json({"message": "Hello, world!"});
-    });
-
-
-
-};
-
-function callback(code,done) {
-    console.log("Hello from callback function");
-    oauth2Client.getToken(code, function (err, tokens) {
-      // Now tokens contains an access_token and an optional refresh_token. Save them.
-      if (!err) {
-        console.log("Successfully set credentials.\n Tokens: "+Object.keys(tokens));
-
-        oauth2Client.setCredentials(tokens);
-        done();
-      }
-      else {
-        console.log("Error: "+err);
-      }
-    });
-}
+}; // closes module.exports
 
 // route middleware to make sure a user is logged in
 function isLoggedIn(req, res, next) {
 
     // if user is authenticated in the session, carry on 
-    if (req.user)
+    if (req.isAuthenticated())
         return next();
 
     // if they aren't redirect them to the home page

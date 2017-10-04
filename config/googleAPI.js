@@ -1,50 +1,90 @@
-const unirest = require('unirest');
 const auth = require('../config/auth');
 var google = require('googleapis');
-
-// const credentials = {
-//   client: {
-//     id: auth.googleAuth.clientID,
-//     secret: auth.googleAuth.clientSecret
-//   },
-//   auth: {
-//     tokenHost: auth.googleAuth.tokenURL,
-//     tokenPath: auth.googleAuth.tokenURL,
-//     authorizePath: auth.googleAuth.oAuthURL
-//   }
-// };
-
-// const oauth2 = require('simple-oauth2').create(credentials);
+var User = require('../app/models/user');
 
 var OAuth2 = google.auth.OAuth2;
 
-var oauth2Client = new OAuth2(
+var oAuth2Client = new OAuth2(
   auth.googleAuth.clientID,
   auth.googleAuth.clientSecret,
   auth.googleAuth.callbackURL
 );
 
-var scopes = ['profile', 'email', 'https://www.googleapis.com/auth/calendar'];
-
-var url = oauth2Client.generateAuthUrl({
-  // 'online' (default) or 'offline' (gets refresh_token)
-  access_type: 'offline',
-  scope: scopes
+var calendar = google.calendar({
+	version: 'v3',
+	auth: oAuth2Client
 });
 
-
-
-
 module.exports = {
-	getCalendars: function() {
-        unirest.get(auth.googleAuth.baseURL+'/users/me/calendarList')
-        .end(function (response) {
-            console.log("Success: "+response.raw_body);
+
+	setCredentials: function (user){
+		var self = this;
+		return new Promise (function(resolve, reject) {
+			oAuth2Client.setCredentials({
+				token: user.google.token,
+				refresh_token: user.google.refreshToken
+			});
+			if (Date.now()>user.google.expires) {
+				self.refreshTokens(user._id);
+				process.nextTick(resolve(true));
+			}
+			else {
+				resolve(false);
+			}
+		});
+	},
+
+	refreshTokens: function(userId) {
+		oAuth2Client.refreshAccessToken(function(err, tokens) {
+			User.findOneAndUpdate(
+				{
+					_id: userId
+				},
+				{
+					$set: {
+						"google.refreshToken":tokens.refresh_token,
+						"google.token" : tokens.access_token,
+						"google.expires" : new Date(tokens.expiry_date)
+					}
+				}
+			).then(function(user) {
+				console.log("Successfully refreshed tokens, and stored response.");
+				console.log("User: "+user);
+			});
+		});
+	},
+
+	// Adjust for promise support!!
+	getCalendars: function(email) {
+		var now = new Date();
+		var tomorrow = new Date();
+		tomorrow.setDate(now.getDate()+1);
+        return new Promise(function(resolve, reject) {
+        	calendar.events.list({
+				calendarId: email,
+				timeMin: now.toISOString(),
+				timeMax: tomorrow.toISOString(),
+				singleEvents: true,
+				orderBy: 'startTime'
+			}, function(err, response) {
+				if (err) {
+					console.log("Google Calendar returned an error: "+err);
+					reject(err);
+				}
+				var events = response.items;
+				if (events.length === 0) {
+					console.log('No upcoming events found.');
+				} else {
+					console.log('Upcoming events found.');
+
+				}
+				resolve(events);
+			});
         });
 	},
 
 	callback: function(code) {
-		oauth2Client.getToken(code, function (err, tokens) {
+		oAuth2Client.getToken(code, function (err, tokens) {
           // Now tokens contains an access_token and an optional refresh_token. Save them.
           if (!err) {
             console.log("Successfully set credentials.\n Tokens: "+tokens);

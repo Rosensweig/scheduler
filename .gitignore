@@ -1,3 +1,4 @@
 node_modules
 config/database.js
+config/auth.js
 client/node_modules
